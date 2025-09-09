@@ -45,9 +45,8 @@
                 const device = await navigator.usb.requestDevice({
                     filters: [{ vendorId: 0x04e8 }] // Samsung VID
                 });
+                console.log('Device:', device);
                 await device.open();
-
-                // Select configuration
                 await device.selectConfiguration(1);
 
                 // Find and claim a valid interface
@@ -56,11 +55,9 @@
                 let outEndpoint = null;
 
                 for (const iface of device.configuration.interfaces) {
-                    try {
-                        await device.claimInterface(iface.interfaceNumber);
-
-                        // Check alternate settings
-                        for (const alternate of iface.alternates) {
+                    for (const alternate of iface.alternates) {
+                        try {
+                            await device.claimInterface(iface.interfaceNumber);
                             await device.selectAlternateInterface(iface.interfaceNumber, alternate.alternateSetting);
 
                             // Find valid endpoints
@@ -69,13 +66,16 @@
 
                             if (inEndpoint && outEndpoint) {
                                 selectedInterface = iface;
+                                console.log(`Selected interface ${iface.interfaceNumber}, alternate ${alternate.alternateSetting}`);
+                                console.log('In Endpoint:', inEndpoint);
+                                console.log('Out Endpoint:', outEndpoint);
                                 break;
                             }
+                        } catch (e) {
+                            console.log(`Failed to claim interface ${iface.interfaceNumber}, alternate ${alternate.alternateSetting}: ${e.message}`);
                         }
-                        if (selectedInterface) break;
-                    } catch (e) {
-                        console.log(`Failed to claim interface ${iface.interfaceNumber}: ${e.message}`);
                     }
+                    if (selectedInterface) break;
                 }
 
                 if (!selectedInterface || !inEndpoint || !outEndpoint) {
@@ -93,18 +93,25 @@
 
                 let output = '';
                 for (const command of commands) {
-                    // Encode and send command
-                    const encoder = new TextEncoder();
-                    await device.transferOut(outEndpoint.endpointNumber, encoder.encode(command));
+                    try {
+                        // Encode and send command
+                        const encoder = new TextEncoder();
+                        await device.transferOut(outEndpoint.endpointNumber, encoder.encode(command));
+                        console.log(`Sent command: ${command.trim()}`);
 
-                    // Read response with timeout
-                    const result = await Promise.race([
-                        device.transferIn(inEndpoint.endpointNumber, 64),
-                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
-                    ]);
-                    const decoder = new TextDecoder();
-                    const response = decoder.decode(result.data);
-                    output += `${command.trim()}: ${response}\n`;
+                        // Read response with increased timeout
+                        const result = await Promise.race([
+                            device.transferIn(inEndpoint.endpointNumber, 64),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout reading response')), 2000))
+                        ]);
+                        const decoder = new TextDecoder();
+                        const response = decoder.decode(result.data);
+                        console.log(`Response for ${command.trim()}: ${response}`);
+                        output += `${command.trim()}: ${response}\n`;
+                    } catch (e) {
+                        console.log(`Error for ${command.trim()}: ${e.message}`);
+                        output += `${command.trim()}: Error - ${e.message}\n`;
+                    }
                 }
 
                 // Close device
@@ -113,8 +120,8 @@
                 // Display formatted output
                 document.getElementById('output').textContent = formatOutput(output);
             } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure the phone is connected via USB, in the correct mode, and USB drivers are installed. Check console for endpoint details.`;
-                console.log('Device Info:', navigator.usb.getDevices());
+                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure the phone is connected via USB in the correct mode (same as your working tool) and USB drivers are installed. Check console for endpoint details.`;
+                console.log('Device Info:', await navigator.usb.getDevices());
             }
         }
 
