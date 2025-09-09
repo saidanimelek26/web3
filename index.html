@@ -41,25 +41,45 @@
     <script>
         async function connectDevice() {
             try {
-                // Request USB device
-                const device = await navigator.usb.requestDevice({ filters: [] });
+                // Request USB device with Samsung vendor ID
+                const device = await navigator.usb.requestDevice({
+                    filters: [{ vendorId: 0x04e8 }] // Samsung VID
+                });
                 await device.open();
+
+                // Select configuration
                 await device.selectConfiguration(1);
 
-                // Try claiming each interface
-                let interfaceClaimed = false;
-                for (let i = 0; i < device.configuration.interfaces.length; i++) {
+                // Find and claim a valid interface
+                let selectedInterface = null;
+                let inEndpoint = null;
+                let outEndpoint = null;
+
+                for (const iface of device.configuration.interfaces) {
                     try {
-                        await device.claimInterface(i);
-                        interfaceClaimed = true;
-                        break;
+                        await device.claimInterface(iface.interfaceNumber);
+
+                        // Check alternate settings
+                        for (const alternate of iface.alternates) {
+                            await device.selectAlternateInterface(iface.interfaceNumber, alternate.alternateSetting);
+
+                            // Find valid endpoints
+                            inEndpoint = alternate.endpoints.find(ep => ep.direction === 'in');
+                            outEndpoint = alternate.endpoints.find(ep => ep.direction === 'out');
+
+                            if (inEndpoint && outEndpoint) {
+                                selectedInterface = iface;
+                                break;
+                            }
+                        }
+                        if (selectedInterface) break;
                     } catch (e) {
-                        console.log(`Failed to claim interface ${i}: ${e.message}`);
+                        console.log(`Failed to claim interface ${iface.interfaceNumber}: ${e.message}`);
                     }
                 }
 
-                if (!interfaceClaimed) {
-                    throw new Error('No accessible USB interface found.');
+                if (!selectedInterface || !inEndpoint || !outEndpoint) {
+                    throw new Error('No valid interface or endpoints found.');
                 }
 
                 // AT commands
@@ -68,17 +88,18 @@
                     'AT+CGMM\r', // Model Number
                     'AT+CGMR\r', // Firmware Version
                     'AT+CGSN\r'  // IMEI
+                    // Add Samsung-specific commands if discovered
                 ];
 
                 let output = '';
                 for (const command of commands) {
                     // Encode and send command
                     const encoder = new TextEncoder();
-                    await device.transferOut(1, encoder.encode(command));
+                    await device.transferOut(outEndpoint.endpointNumber, encoder.encode(command));
 
                     // Read response with timeout
                     const result = await Promise.race([
-                        device.transferIn(1, 64),
+                        device.transferIn(inEndpoint.endpointNumber, 64),
                         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 1000))
                     ]);
                     const decoder = new TextDecoder();
@@ -92,7 +113,8 @@
                 // Display formatted output
                 document.getElementById('output').textContent = formatOutput(output);
             } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure USB Debugging is enabled, the phone is in DM+MODEM+ADB mode (*#0808#), and correct USB drivers are installed.`;
+                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure the phone is connected via USB, in the correct mode, and USB drivers are installed. Check console for endpoint details.`;
+                console.log('Device Info:', navigator.usb.getDevices());
             }
         }
 
