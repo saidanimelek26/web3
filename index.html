@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Enhanced Phone Info Reader</title>
+    <title>Fixed Phone Info Reader</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -291,16 +291,16 @@
 <body>
     <div class="container">
         <header>
-            <h1>Enhanced Phone Information Reader</h1>
+            <h1>Fixed Phone Information Reader</h1>
             <p class="subtitle">Robust USB communication with improved error handling</p>
         </header>
         
         <div class="content">
             <div class="card">
                 <div class="card-title">
-                    <i class="fas fa-info-circle"></i> About This Enhanced Version
+                    <i class="fas fa-info-circle"></i> About This Fixed Version
                 </div>
-                <p>This improved version includes better error handling, connection stability checks, and automatic retry mechanisms for USB communication issues.</p>
+                <p>This version includes improved error handling for USB disconnections and better recovery mechanisms.</p>
             </div>
             
             <div class="connection-test">
@@ -349,34 +349,31 @@
             </div>
             
             <div class="instructions">
-                <h3><i class="fas fa-lightbulb"></i> Enhanced Connection Instructions</h3>
+                <h3><i class="fas fa-lightbulb"></i> Connection Instructions</h3>
                 <ul>
                     <li>Connect your phone to your computer using a high-quality USB cable</li>
                     <li>Enable USB debugging on your Android device (Developer options)</li>
                     <li>On your phone, select "File Transfer" or "MTP" mode when the USB prompt appears</li>
                     <li>Try different USB modes if connection fails (PTP, RNDIS, etc.)</li>
                     <li>Click "Test WebUSB Support" first to verify browser compatibility</li>
-                    <li>Use "Test Connection" after connecting to verify the connection is stable</li>
                 </ul>
-                <p><strong>Note:</strong> This version includes automatic retry mechanisms for failed commands.</p>
             </div>
             
             <div class="troubleshooting">
-                <h3><i class="fas fa-wrench"></i> Enhanced Troubleshooting</h3>
-                <p>If you're experiencing issues:</p>
+                <h3><i class="fas fa-wrench"></i> Troubleshooting</h3>
+                <p>If you're experiencing disconnection issues:</p>
                 <ul>
                     <li>Try a different USB cable or port (USB 2.0 ports often work better)</li>
                     <li>Check if your device manufacturer requires special drivers</li>
                     <li>Restart your phone and computer</li>
                     <li>Try enabling/disabling USB tethering</li>
                     <li>Some devices require specific USB modes (PTP, RNDIS, etc.)</li>
-                    <li>Check browser console (F12) for detailed error messages</li>
                 </ul>
             </div>
         </div>
         
         <footer>
-            <p>Enhanced WebUSB Phone Information Tool | Works best on Chrome/Edge browsers</p>
+            <p>Fixed WebUSB Phone Information Tool | Works best on Chrome/Edge browsers</p>
         </footer>
     </div>
 
@@ -388,7 +385,7 @@
         let selectedInterface = null;
         let isConnected = false;
         let retryCount = 0;
-        const maxRetries = 3;
+        const maxRetries = 2;
         
         // DOM elements
         const connectBtn = document.getElementById('connectBtn');
@@ -560,9 +557,6 @@
                 updateProgress(100);
                 updateButtonStates();
                 
-                // Test the connection
-                await testConnection();
-                
             } catch (error) {
                 updateStatus(`Connection error: ${error.message}`, 'error');
                 appendOutput(`Error: ${error.message}`, 'error');
@@ -570,6 +564,8 @@
                 
                 if (usbDevice) {
                     try {
+                        // Check if device is still connected before trying to close it
+                        await navigator.usb.getDevices();
                         await usbDevice.close();
                     } catch (e) {
                         console.error('Error closing device:', e);
@@ -583,13 +579,32 @@
             }
         }
         
-        // Send AT command with retry mechanism
+        // Check if device is still connected
+        async function isDeviceConnected() {
+            if (!usbDevice) return false;
+            
+            try {
+                // Try to get devices to see if our device is still in the list
+                const devices = await navigator.usb.getDevices();
+                return devices.some(device => device === usbDevice);
+            } catch (error) {
+                console.error('Error checking device connection:', error);
+                return false;
+            }
+        }
+        
+        // Send AT command with improved error handling
         async function sendATCommand(command, description) {
             if (!usbDevice || !outEndpoint || !inEndpoint) {
                 throw new Error('Device not connected');
             }
             
             appendOutput(`Sending: ${command.trim()}`);
+            
+            // Check if device is still connected
+            if (!(await isDeviceConnected())) {
+                throw new Error('Device was disconnected');
+            }
             
             // Encode and send command
             const encoder = new TextEncoder();
@@ -600,6 +615,11 @@
                 
                 // Wait a bit before reading response
                 await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Check if device is still connected before reading
+                if (!(await isDeviceConnected())) {
+                    throw new Error('Device was disconnected while waiting for response');
+                }
                 
                 // Read response
                 let result;
@@ -626,26 +646,13 @@
                 appendOutput(`Response: ${cleanResponse || 'No data'}`);
                 return cleanResponse || 'No data';
             } catch (error) {
-                if (error.message.includes('disconnected') && retryCount < maxRetries) {
-                    retryCount++;
-                    appendOutput(`Connection issue detected. Retrying (${retryCount}/${maxRetries})...`, 'warning');
-                    
-                    // Wait a bit before retrying
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                    // Try to reconnect
-                    try {
-                        await usbDevice.close();
-                        await usbDevice.open();
-                        await usbDevice.selectConfiguration(1);
-                        await usbDevice.claimInterface(selectedInterface.interfaceNumber);
-                        
-                        appendOutput('Reconnected successfully. Retrying command...', 'success');
-                        return await sendATCommand(command, description);
-                    } catch (reconnectError) {
-                        throw new Error(`Failed to reconnect after ${retryCount} attempts: ${reconnectError.message}`);
-                    }
+                if (error.message.includes('disconnected')) {
+                    // Device was disconnected, we can't recover from this
+                    isConnected = false;
+                    updateButtonStates();
+                    throw new Error('Device was disconnected during communication');
                 } else {
+                    // Other error, just rethrow
                     throw error;
                 }
             }
@@ -667,9 +674,7 @@
                     { cmd: 'AT+CGMI\r\n', desc: 'Manufacturer' },
                     { cmd: 'AT+CGMM\r\n', desc: 'Model Number' },
                     { cmd: 'AT+CGMR\r\n', desc: 'Firmware Version' },
-                    { cmd: 'AT+CGSN\r\n', desc: 'IMEI' },
-                    { cmd: 'AT+CCID\r\n', desc: 'SIM Card ID' },
-                    { cmd: 'AT+CSQ\r\n', desc: 'Signal Quality' }
+                    { cmd: 'AT+CGSN\r\n', desc: 'IMEI' }
                 ];
                 
                 const results = {};
@@ -684,6 +689,11 @@
                     } catch (e) {
                         results[command.desc] = `Error: ${e.message}`;
                         appendOutput(`Error getting ${command.desc}: ${e.message}`, 'error');
+                        
+                        // If device was disconnected, break out of the loop
+                        if (e.message.includes('disconnected')) {
+                            break;
+                        }
                     }
                     
                     // Delay between commands
@@ -696,8 +706,6 @@
                 appendOutput(`Model: ${results['Model Number']}`);
                 appendOutput(`Firmware: ${results['Firmware Version']}`);
                 appendOutput(`IMEI: ${results['IMEI']}`);
-                appendOutput(`SIM ID: ${results['SIM Card ID']}`);
-                appendOutput(`Signal: ${results['Signal Quality']}`);
                 
                 updateStatus('Device information retrieved', 'success');
                 updateProgress(100);
@@ -713,9 +721,15 @@
         async function disconnectDevice() {
             if (usbDevice) {
                 try {
-                    await usbDevice.close();
-                    updateStatus('Device disconnected', 'success');
-                    appendOutput('Device disconnected successfully');
+                    // Check if device is still connected before trying to close it
+                    if (await isDeviceConnected()) {
+                        await usbDevice.close();
+                        updateStatus('Device disconnected', 'success');
+                        appendOutput('Device disconnected successfully');
+                    } else {
+                        updateStatus('Device was already disconnected', 'warning');
+                        appendOutput('Device was already disconnected');
+                    }
                 } catch (error) {
                     updateStatus('Error disconnecting device', 'error');
                     appendOutput(`Error disconnecting: ${error.message}`, 'error');
