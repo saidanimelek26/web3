@@ -3,145 +3,607 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phone Info Reader (AT Commands)</title>
+    <title>Phone Info Reader (AT Commands - No ADB)</title>
     <style>
+        :root {
+            --primary: #3498db;
+            --secondary: #2c3e50;
+            --success: #2ecc71;
+            --danger: #e74c3c;
+            --warning: #f39c12;
+            --light: #ecf0f1;
+            --dark: #34495e;
+        }
+        
         body {
-            font-family: Arial, sans-serif;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            background-color: #f0f0f0;
         }
-        button {
-            padding: 10px 20px;
+        
+        .container {
+            width: 100%;
+            max-width: 900px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        header {
+            background: var(--secondary);
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+        
+        .subtitle {
             font-size: 16px;
-            cursor: pointer;
-            margin-bottom: 20px;
+            opacity: 0.8;
         }
-        #output {
-            background-color: white;
+        
+        .content {
+            padding: 25px;
+        }
+        
+        .card {
+            background: var(--light);
+            border-radius: 10px;
             padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-            width: 80%;
-            max-width: 600px;
-            text-align: left;
+            margin-bottom: 25px;
+        }
+        
+        .card-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 15px;
+            color: var(--secondary);
+            display: flex;
+            align-items: center;
+        }
+        
+        .card-title i {
+            margin-right: 10px;
+            font-size: 24px;
+        }
+        
+        .button-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin: 20px 0;
+        }
+        
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        button i {
+            margin-right: 8px;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: #2980b9;
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: var(--secondary);
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #1e2a36;
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background: var(--success);
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #27ae60;
+            transform: translateY(-2px);
+        }
+        
+        .btn-danger {
+            background: var(--danger);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c0392b;
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .status-container {
+            background: white;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 20px 0;
+            border-left: 5px solid var(--primary);
+        }
+        
+        .status-title {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: var(--secondary);
+        }
+        
+        #status {
+            min-height: 24px;
+            color: var(--primary);
+            font-weight: 500;
+        }
+        
+        .output-container {
+            background: var(--light);
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        #output {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            min-height: 250px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: monospace;
             white-space: pre-wrap;
+            line-height: 1.5;
+        }
+        
+        .progress-container {
+            height: 8px;
+            background: #dfe6e9;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            width: 0%;
+            background: var(--primary);
+            border-radius: 4px;
+            transition: width 0.5s ease;
+        }
+        
+        .instructions {
+            background: #fff8e1;
+            border-left: 5px solid #ffc107;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .instructions h3 {
+            color: #d35400;
+            margin-bottom: 15px;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .troubleshooting {
+            background: #ffebee;
+            border-left: 5px solid #e74c3c;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .troubleshooting h3 {
+            color: #c0392b;
+            margin-bottom: 15px;
+        }
+        
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            font-size: 14px;
+        }
+        
+        .success {
+            color: var(--success);
+        }
+        
+        .error {
+            color: var(--danger);
+        }
+        
+        .warning {
+            color: var(--warning);
+        }
+        
+        @media (max-width: 768px) {
+            .button-group {
+                flex-direction: column;
+            }
+            
+            button {
+                width: 100%;
+            }
         }
     </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
-    <h1>Phone Information Reader (AT Commands)</h1>
-    <button onclick="connectDevice()">Connect to Phone</button>
-    <div id="output">Waiting for connection...</div>
+    <div class="container">
+        <header>
+            <h1>Phone Information Reader</h1>
+            <p class="subtitle">Access device information using AT commands via WebUSB</p>
+        </header>
+        
+        <div class="content">
+            <div class="card">
+                <div class="card-title">
+                    <i class="fas fa-info-circle"></i> About This Tool
+                </div>
+                <p>This tool attempts to communicate with your phone using the WebUSB API to execute AT commands. It works best with devices that expose a modem interface via USB without requiring additional drivers or ADB.</p>
+            </div>
+            
+            <div class="button-group">
+                <button id="connectBtn" class="btn-primary">
+                    <i class="fas fa-usb"></i> Connect to Device
+                </button>
+                <button id="getInfoBtn" class="btn-secondary" disabled>
+                    <i class="fas fa-microchip"></i> Get Device Info
+                </button>
+                <button id="disconnectBtn" class="btn-danger" disabled>
+                    <i class="fas fa-times"></i> Disconnect
+                </button>
+                <button id="clearBtn" class="btn-secondary">
+                    <i class="fas fa-broom"></i> Clear Output
+                </button>
+            </div>
+            
+            <div class="progress-container">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            
+            <div class="status-container">
+                <div class="status-title">Connection Status</div>
+                <div id="status">Ready to connect</div>
+            </div>
+            
+            <div class="output-container">
+                <div class="card-title">
+                    <i class="fas fa-terminal"></i> Command Output
+                </div>
+                <div id="output"></div>
+            </div>
+            
+            <div class="instructions">
+                <h3><i class="fas fa-lightbulb"></i> Connection Instructions</h3>
+                <ul>
+                    <li>Connect your phone to your computer using a USB cable</li>
+                    <li>Enable USB debugging on your Android device (Developer options)</li>
+                    <li>On your phone, select "File Transfer" or "MTP" mode when the USB prompt appears</li>
+                    <li>Some devices may require you to enable "USB tethering" temporarily</li>
+                    <li>Click "Connect to Device" and select your phone from the list</li>
+                </ul>
+                <p><strong>Note:</strong> Browser support for WebUSB is limited. This works best in Chrome/Edge on desktop.</p>
+            </div>
+            
+            <div class="troubleshooting">
+                <h3><i class="fas fa-wrench"></i> Troubleshooting</h3>
+                <p>If you're experiencing issues:</p>
+                <ul>
+                    <li>Try a different USB cable or port</li>
+                    <li>Check if your device manufacturer requires special drivers</li>
+                    <li>Restart your phone and computer</li>
+                    <li>Try enabling/disabling USB tethering</li>
+                    <li>Some devices require specific USB modes (PTP, RNDIS, etc.)</li>
+                </ul>
+            </div>
+        </div>
+        
+        <footer>
+            <p>WebUSB Phone Information Tool | Works best on Chrome/Edge browsers</p>
+        </footer>
+    </div>
 
     <script>
+        // Global variables
+        let usbDevice = null;
+        let inEndpoint = null;
+        let outEndpoint = null;
+        let selectedInterface = null;
+        
+        // DOM elements
+        const connectBtn = document.getElementById('connectBtn');
+        const getInfoBtn = document.getElementById('getInfoBtn');
+        const disconnectBtn = document.getElementById('disconnectBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        const statusEl = document.getElementById('status');
+        const outputEl = document.getElementById('output');
+        const progressBar = document.getElementById('progressBar');
+        
+        // Update status message
+        function updateStatus(message, type = 'info') {
+            statusEl.innerHTML = message;
+            statusEl.className = '';
+            if (type !== 'info') {
+                statusEl.classList.add(type);
+            }
+        }
+        
+        // Update progress bar
+        function updateProgress(percent) {
+            progressBar.style.width = percent + '%';
+        }
+        
+        // Append text to output
+        function appendOutput(text, type = 'info') {
+            const div = document.createElement('div');
+            div.textContent = text;
+            if (type !== 'info') {
+                div.className = type;
+            }
+            outputEl.appendChild(div);
+            outputEl.scrollTop = outputEl.scrollHeight;
+        }
+        
+        // Clear output
+        function clearOutput() {
+            outputEl.innerHTML = '';
+        }
+        
+        // Update button states
+        function updateButtonStates() {
+            const isConnected = usbDevice !== null;
+            connectBtn.disabled = isConnected;
+            getInfoBtn.disabled = !isConnected;
+            disconnectBtn.disabled = !isConnected;
+        }
+        
+        // Connect to device
         async function connectDevice() {
             try {
-                // Request USB device with Samsung vendor ID
-                const device = await navigator.usb.requestDevice({
+                updateStatus('Requesting device access...');
+                updateProgress(10);
+                
+                // Check if WebUSB is available
+                if (!navigator.usb) {
+                    throw new Error('WebUSB is not supported in this browser. Try Chrome or Edge.');
+                }
+                
+                // Request device access
+                usbDevice = await navigator.usb.requestDevice({
                     filters: [{ vendorId: 0x04e8 }] // Samsung VID
                 });
-                console.log('Device:', device);
-                await device.open();
-                await device.selectConfiguration(1);
-
-                // Find and claim a valid interface
-                let selectedInterface = null;
-                let inEndpoint = null;
-                let outEndpoint = null;
-
-                for (const iface of device.configuration.interfaces) {
+                
+                updateStatus('Opening device...');
+                updateProgress(30);
+                
+                await usbDevice.open();
+                await usbDevice.selectConfiguration(1);
+                
+                updateStatus('Finding communication interface...');
+                updateProgress(50);
+                
+                // Try to find a suitable interface
+                let interfaceFound = false;
+                
+                for (const iface of usbDevice.configuration.interfaces) {
                     for (const alternate of iface.alternates) {
                         try {
-                            await device.claimInterface(iface.interfaceNumber);
-                            await device.selectAlternateInterface(iface.interfaceNumber, alternate.alternateSetting);
-
-                            // Find valid endpoints
+                            await usbDevice.claimInterface(iface.interfaceNumber);
+                            await usbDevice.selectAlternateInterface(iface.interfaceNumber, alternate.alternateSetting);
+                            
+                            // Find endpoints
                             inEndpoint = alternate.endpoints.find(ep => ep.direction === 'in');
                             outEndpoint = alternate.endpoints.find(ep => ep.direction === 'out');
-
+                            
                             if (inEndpoint && outEndpoint) {
                                 selectedInterface = iface;
-                                console.log(`Selected interface ${iface.interfaceNumber}, alternate ${alternate.alternateSetting}`);
-                                console.log('In Endpoint:', inEndpoint);
-                                console.log('Out Endpoint:', outEndpoint);
+                                interfaceFound = true;
+                                updateStatus(`Using interface ${iface.interfaceNumber}`, 'success');
+                                updateProgress(70);
                                 break;
                             }
                         } catch (e) {
-                            console.log(`Failed to claim interface ${iface.interfaceNumber}, alternate ${alternate.alternateSetting}: ${e.message}`);
+                            console.warn(`Failed to claim interface ${iface.interfaceNumber}: ${e.message}`);
                         }
                     }
-                    if (selectedInterface) break;
+                    if (interfaceFound) break;
                 }
-
-                if (!selectedInterface || !inEndpoint || !outEndpoint) {
-                    throw new Error('No valid interface or endpoints found.');
+                
+                if (!interfaceFound || !inEndpoint || !outEndpoint) {
+                    throw new Error('No valid communication interface found. The device might not be in the correct mode.');
                 }
-
-                // AT commands with \r\n termination
-                const commands = [
-                    'AT+CGMI\r\n', // Manufacturer
-                    'AT+CGMM\r\n', // Model Number
-                    'AT+CGMR\r\n', // Firmware Version
-                    'AT+CGSN\r\n'  // IMEI
-                    // Add Samsung-specific commands if discovered
-                ];
-
-                let output = '';
-                for (const command of commands) {
-                    try {
-                        // Encode and send command
-                        const encoder = new TextEncoder();
-                        await device.transferOut(outEndpoint.endpointNumber, encoder.encode(command));
-                        console.log(`Sent command: ${command.trim()}`);
-
-                        // Read response with increased timeout
-                        const result = await Promise.race([
-                            device.transferIn(inEndpoint.endpointNumber, 128),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout reading response')), 3000))
-                        ]);
-                        const decoder = new TextDecoder();
-                        const response = decoder.decode(result.data);
-                        console.log(`Response for ${command.trim()}: ${response}`);
-                        output += `${command.trim()}: ${response}\n`;
-                    } catch (e) {
-                        console.log(`Error for ${command.trim()}: ${e.message}`);
-                        output += `${command.trim()}: Error - ${e.message}\n`;
-                    }
-                }
-
-                // Close device
-                await device.close();
-
-                // Display formatted output
-                document.getElementById('output').textContent = formatOutput(output);
+                
+                updateStatus('Device connected successfully', 'success');
+                updateProgress(100);
+                updateButtonStates();
+                
             } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure the phone is connected via USB in the same mode as your working tool, USB drivers are installed, and the modem is accessible. Check console for endpoint details.`;
-                console.log('Device Info:', await navigator.usb.getDevices());
+                updateStatus(`Connection error: ${error.message}`, 'error');
+                appendOutput(`Error: ${error.message}`, 'error');
+                console.error('Connection error:', error);
+                
+                if (usbDevice) {
+                    try {
+                        await usbDevice.close();
+                    } catch (e) {
+                        console.error('Error closing device:', e);
+                    }
+                    usbDevice = null;
+                }
+                
+                updateButtonStates();
+                updateProgress(0);
             }
         }
-
-        function formatOutput(rawOutput) {
-            // Parse AT command responses
-            const lines = rawOutput.split('\n');
-            let model = 'Unknown';
-            let firmware = 'Unknown';
-
-            lines.forEach(line => {
-                if (line.includes('AT+CGMM')) {
-                    model = line.split(':')[1]?.trim() || 'Unknown';
-                } else if (line.includes('AT+CGMR')) {
-                    firmware = line.split(':')[1]?.trim() || 'Unknown';
-                }
-            });
-
-            // Mocked formatting for BL, AP, CP, CSC
-            return `Model Number: ${model}\nFirmware ver:\n  BL: ${firmware}\n  AP: ${firmware}\n  CP: ${firmware}\n  CSC: ${firmware}`;
+        
+        // Send AT command
+        async function sendATCommand(command, description) {
+            if (!usbDevice || !outEndpoint || !inEndpoint) {
+                throw new Error('Device not connected');
+            }
+            
+            appendOutput(`Sending: ${command.trim()}`);
+            
+            // Encode and send command
+            const encoder = new TextEncoder();
+            const data = encoder.encode(command);
+            
+            await usbDevice.transferOut(outEndpoint.endpointNumber, data);
+            
+            // Wait a bit before reading response
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Read response
+            let result;
+            try {
+                result = await Promise.race([
+                    usbDevice.transferIn(inEndpoint.endpointNumber, 128),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for response')), 2000))
+                ]);
+            } catch (e) {
+                appendOutput(`No response received for ${description}`, 'warning');
+                return 'No response';
+            }
+            
+            const decoder = new TextDecoder();
+            const response = decoder.decode(result.data);
+            
+            // Clean up the response
+            const cleanResponse = response
+                .replace(command, '')
+                .replace(/OK|ERROR/gi, '')
+                .replace(/\r|\n/g, ' ')
+                .trim();
+                
+            appendOutput(`Response: ${cleanResponse || 'No data'}`);
+            return cleanResponse || 'No data';
         }
+        
+        // Get device information
+        async function getDeviceInfo() {
+            if (!usbDevice) {
+                updateStatus('Device not connected', 'error');
+                return;
+            }
+            
+            try {
+                updateStatus('Reading device information...');
+                clearOutput();
+                
+                const commands = [
+                    { cmd: 'AT+CGMI\r\n', desc: 'Manufacturer' },
+                    { cmd: 'AT+CGMM\r\n', desc: 'Model Number' },
+                    { cmd: 'AT+CGMR\r\n', desc: 'Firmware Version' },
+                    { cmd: 'AT+CGSN\r\n', desc: 'IMEI' },
+                    { cmd: 'AT+CCID\r\n', desc: 'SIM Card ID' },
+                    { cmd: 'AT+CSQ\r\n', desc: 'Signal Quality' }
+                ];
+                
+                const results = {};
+                
+                for (let i = 0; i < commands.length; i++) {
+                    const command = commands[i];
+                    updateStatus(`Getting ${command.desc} (${i+1}/${commands.length})`);
+                    updateProgress((i / commands.length) * 100);
+                    
+                    try {
+                        results[command.desc] = await sendATCommand(command.cmd, command.desc);
+                    } catch (e) {
+                        results[command.desc] = `Error: ${e.message}`;
+                        appendOutput(`Error getting ${command.desc}: ${e.message}`, 'error');
+                    }
+                    
+                    // Delay between commands
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                }
+                
+                // Display formatted results
+                appendOutput('\n==== DEVICE INFORMATION ====');
+                appendOutput(`Manufacturer: ${results['Manufacturer']}`);
+                appendOutput(`Model: ${results['Model Number']}`);
+                appendOutput(`Firmware: ${results['Firmware Version']}`);
+                appendOutput(`IMEI: ${results['IMEI']}`);
+                appendOutput(`SIM ID: ${results['SIM Card ID']}`);
+                appendOutput(`Signal: ${results['Signal Quality']}`);
+                
+                updateStatus('Device information retrieved', 'success');
+                updateProgress(100);
+                
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, 'error');
+                appendOutput(`Error getting device info: ${error.message}`, 'error');
+                console.error('Device info error:', error);
+            }
+        }
+        
+        // Disconnect device
+        async function disconnectDevice() {
+            if (usbDevice) {
+                try {
+                    await usbDevice.close();
+                    updateStatus('Device disconnected', 'success');
+                    appendOutput('Device disconnected successfully');
+                } catch (error) {
+                    updateStatus('Error disconnecting device', 'error');
+                    appendOutput(`Error disconnecting: ${error.message}`, 'error');
+                }
+                usbDevice = null;
+            }
+            
+            updateButtonStates();
+            updateProgress(0);
+        }
+        
+        // Event listeners
+        connectBtn.addEventListener('click', connectDevice);
+        getInfoBtn.addEventListener('click', getDeviceInfo);
+        disconnectBtn.addEventListener('click', disconnectDevice);
+        clearBtn.addEventListener('click', clearOutput);
+        
+        // Initialize
+        updateButtonStates();
     </script>
 </body>
 </html>
