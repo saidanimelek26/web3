@@ -1,0 +1,134 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phone Info Reader</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        #output {
+            background-color: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            width: 80%;
+            max-width: 600px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <h1>Phone Information Reader</h1>
+    <button onclick="connectDevice()">Connect to Phone</button>
+    <div id="output">Waiting for connection...</div>
+
+    <script>
+        async function connectDevice() {
+            try {
+                // Request USB device
+                const device = await navigator.usb.requestDevice({ filters: [] });
+                await device.open();
+                await device.selectConfiguration(1);
+                await device.claimInterface(0);
+
+                // Send AT commands
+                const commands = [
+                    'AT+CGMI\r', // Manufacturer
+                    'AT+CGMM\r', // Model Number
+                    'AT+CGMR\r', // Firmware Version
+                    'AT+CGSN\r'  // IMEI (optional)
+                ];
+
+                let output = '';
+                for (const command of commands) {
+                    // Encode command
+                    const encoder = new TextEncoder();
+                    await device.transferOut(1, encoder.encode(command));
+
+                    // Read response
+                    const result = await device.transferIn(1, 64);
+                    const decoder = new TextDecoder();
+                    const response = decoder.decode(result.data);
+                    output += `${command.trim()}: ${response}\n`;
+                }
+
+                // Display formatted output
+                document.getElementById('output').textContent = formatOutput(output);
+            } catch (error) {
+                document.getElementById('output').textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function formatOutput(rawOutput) {
+            // Parse and format output to match desired structure
+            const lines = rawOutput.split('\n');
+            let model = '', firmware = '';
+            lines.forEach(line => {
+                if (line.includes('AT+CGMM')) {
+                    model = line.split(':')[1]?.trim() || 'Unknown';
+                } else if (line.includes('AT+CGMR')) {
+                    firmware = line.split(':')[1]?.trim() || 'Unknown';
+                }
+            });
+
+            // Mocked formatting to match desired output
+            // Note: Actual firmware details (BL, AP, CP, CSC) may require specific AT commands or parsing
+            return `Model Number: ${model}\nFirmware ver:\n  BL: ${firmware}\n  AP: ${firmware}\n  CP: ${firmware}\n  CSC: ${firmware}`;
+        }
+    </script>
+</body>
+</html>
