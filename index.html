@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Phone Info Reader (AT Commands - No ADB)</title>
+    <title>Enhanced Phone Info Reader</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --primary: #3498db;
@@ -15,8 +16,14 @@
             --dark: #34495e;
         }
         
-        body {
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
             background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
             color: var(--dark);
             line-height: 1.6;
@@ -257,6 +264,19 @@
             color: var(--warning);
         }
         
+        .connection-test {
+            background: #e8f5e9;
+            border-left: 5px solid #4caf50;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        
+        .connection-test h3 {
+            color: #2e7d32;
+            margin-bottom: 15px;
+        }
+        
         @media (max-width: 768px) {
             .button-group {
                 flex-direction: column;
@@ -267,21 +287,34 @@
             }
         }
     </style>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Phone Information Reader</h1>
-            <p class="subtitle">Access device information using AT commands via WebUSB</p>
+            <h1>Enhanced Phone Information Reader</h1>
+            <p class="subtitle">Robust USB communication with improved error handling</p>
         </header>
         
         <div class="content">
             <div class="card">
                 <div class="card-title">
-                    <i class="fas fa-info-circle"></i> About This Tool
+                    <i class="fas fa-info-circle"></i> About This Enhanced Version
                 </div>
-                <p>This tool attempts to communicate with your phone using the WebUSB API to execute AT commands. It works best with devices that expose a modem interface via USB without requiring additional drivers or ADB.</p>
+                <p>This improved version includes better error handling, connection stability checks, and automatic retry mechanisms for USB communication issues.</p>
+            </div>
+            
+            <div class="connection-test">
+                <h3><i class="fas fa-wifi"></i> Connection Test</h3>
+                <p>Check if your browser supports WebUSB and if your device is properly connected.</p>
+                <div class="button-group">
+                    <button id="testWebUsbBtn" class="btn-secondary">
+                        <i class="fas fa-check-circle"></i> Test WebUSB Support
+                    </button>
+                    <button id="testConnectionBtn" class="btn-secondary" disabled>
+                        <i class="fas fa-plug"></i> Test Connection
+                    </button>
+                </div>
+                <div id="testResult"></div>
             </div>
             
             <div class="button-group">
@@ -316,32 +349,34 @@
             </div>
             
             <div class="instructions">
-                <h3><i class="fas fa-lightbulb"></i> Connection Instructions</h3>
+                <h3><i class="fas fa-lightbulb"></i> Enhanced Connection Instructions</h3>
                 <ul>
-                    <li>Connect your phone to your computer using a USB cable</li>
+                    <li>Connect your phone to your computer using a high-quality USB cable</li>
                     <li>Enable USB debugging on your Android device (Developer options)</li>
                     <li>On your phone, select "File Transfer" or "MTP" mode when the USB prompt appears</li>
-                    <li>Some devices may require you to enable "USB tethering" temporarily</li>
-                    <li>Click "Connect to Device" and select your phone from the list</li>
+                    <li>Try different USB modes if connection fails (PTP, RNDIS, etc.)</li>
+                    <li>Click "Test WebUSB Support" first to verify browser compatibility</li>
+                    <li>Use "Test Connection" after connecting to verify the connection is stable</li>
                 </ul>
-                <p><strong>Note:</strong> Browser support for WebUSB is limited. This works best in Chrome/Edge on desktop.</p>
+                <p><strong>Note:</strong> This version includes automatic retry mechanisms for failed commands.</p>
             </div>
             
             <div class="troubleshooting">
-                <h3><i class="fas fa-wrench"></i> Troubleshooting</h3>
+                <h3><i class="fas fa-wrench"></i> Enhanced Troubleshooting</h3>
                 <p>If you're experiencing issues:</p>
                 <ul>
-                    <li>Try a different USB cable or port</li>
+                    <li>Try a different USB cable or port (USB 2.0 ports often work better)</li>
                     <li>Check if your device manufacturer requires special drivers</li>
                     <li>Restart your phone and computer</li>
                     <li>Try enabling/disabling USB tethering</li>
                     <li>Some devices require specific USB modes (PTP, RNDIS, etc.)</li>
+                    <li>Check browser console (F12) for detailed error messages</li>
                 </ul>
             </div>
         </div>
         
         <footer>
-            <p>WebUSB Phone Information Tool | Works best on Chrome/Edge browsers</p>
+            <p>Enhanced WebUSB Phone Information Tool | Works best on Chrome/Edge browsers</p>
         </footer>
     </div>
 
@@ -351,15 +386,21 @@
         let inEndpoint = null;
         let outEndpoint = null;
         let selectedInterface = null;
+        let isConnected = false;
+        let retryCount = 0;
+        const maxRetries = 3;
         
         // DOM elements
         const connectBtn = document.getElementById('connectBtn');
         const getInfoBtn = document.getElementById('getInfoBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
         const clearBtn = document.getElementById('clearBtn');
+        const testWebUsbBtn = document.getElementById('testWebUsbBtn');
+        const testConnectionBtn = document.getElementById('testConnectionBtn');
         const statusEl = document.getElementById('status');
         const outputEl = document.getElementById('output');
         const progressBar = document.getElementById('progressBar');
+        const testResultEl = document.getElementById('testResult');
         
         // Update status message
         function updateStatus(message, type = 'info') {
@@ -393,10 +434,69 @@
         
         // Update button states
         function updateButtonStates() {
-            const isConnected = usbDevice !== null;
             connectBtn.disabled = isConnected;
             getInfoBtn.disabled = !isConnected;
             disconnectBtn.disabled = !isConnected;
+            testConnectionBtn.disabled = !isConnected;
+        }
+        
+        // Test WebUSB support
+        function testWebUsbSupport() {
+            testResultEl.innerHTML = '';
+            
+            if (!navigator.usb) {
+                testResultEl.innerHTML = '<div class="error">WebUSB is not supported in this browser. Try Chrome or Edge.</div>';
+                return;
+            }
+            
+            testResultEl.innerHTML = '<div class="success">WebUSB is supported in this browser.</div>';
+            
+            // Check if we can access devices
+            navigator.usb.getDevices()
+                .then(devices => {
+                    if (devices.length > 0) {
+                        testResultEl.innerHTML += '<div class="success">USB devices detected: ' + devices.length + '</div>';
+                    } else {
+                        testResultEl.innerHTML += '<div class="warning">No USB devices found. Connect a device and click "Connect".</div>';
+                    }
+                })
+                .catch(error => {
+                    testResultEl.innerHTML += '<div class="error">Error accessing USB devices: ' + error.message + '</div>';
+                });
+        }
+        
+        // Test connection stability
+        async function testConnection() {
+            if (!usbDevice) {
+                testResultEl.innerHTML = '<div class="error">No device connected</div>';
+                return;
+            }
+            
+            testResultEl.innerHTML = '<div>Testing connection stability...</div>';
+            
+            try {
+                // Simple test command
+                const encoder = new TextEncoder();
+                const data = encoder.encode('AT\r\n');
+                
+                await usbDevice.transferOut(outEndpoint.endpointNumber, data);
+                
+                // Wait a bit before reading response
+                await new Promise(resolve => setTimeout(resolve, 300));
+                
+                // Read response
+                const result = await usbDevice.transferIn(inEndpoint.endpointNumber, 64);
+                const decoder = new TextDecoder();
+                const response = decoder.decode(result.data);
+                
+                if (response.includes('OK')) {
+                    testResultEl.innerHTML += '<div class="success">Connection test passed</div>';
+                } else {
+                    testResultEl.innerHTML += '<div class="warning">Connection test completed but received unexpected response</div>';
+                }
+            } catch (error) {
+                testResultEl.innerHTML += '<div class="error">Connection test failed: ' + error.message + '</div>';
+            }
         }
         
         // Connect to device
@@ -455,9 +555,13 @@
                     throw new Error('No valid communication interface found. The device might not be in the correct mode.');
                 }
                 
+                isConnected = true;
                 updateStatus('Device connected successfully', 'success');
                 updateProgress(100);
                 updateButtonStates();
+                
+                // Test the connection
+                await testConnection();
                 
             } catch (error) {
                 updateStatus(`Connection error: ${error.message}`, 'error');
@@ -473,12 +577,13 @@
                     usbDevice = null;
                 }
                 
+                isConnected = false;
                 updateButtonStates();
                 updateProgress(0);
             }
         }
         
-        // Send AT command
+        // Send AT command with retry mechanism
         async function sendATCommand(command, description) {
             if (!usbDevice || !outEndpoint || !inEndpoint) {
                 throw new Error('Device not connected');
@@ -490,35 +595,60 @@
             const encoder = new TextEncoder();
             const data = encoder.encode(command);
             
-            await usbDevice.transferOut(outEndpoint.endpointNumber, data);
-            
-            // Wait a bit before reading response
-            await new Promise(resolve => setTimeout(resolve, 300));
-            
-            // Read response
-            let result;
             try {
-                result = await Promise.race([
-                    usbDevice.transferIn(inEndpoint.endpointNumber, 128),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for response')), 2000))
-                ]);
-            } catch (e) {
-                appendOutput(`No response received for ${description}`, 'warning');
-                return 'No response';
-            }
-            
-            const decoder = new TextDecoder();
-            const response = decoder.decode(result.data);
-            
-            // Clean up the response
-            const cleanResponse = response
-                .replace(command, '')
-                .replace(/OK|ERROR/gi, '')
-                .replace(/\r|\n/g, ' ')
-                .trim();
+                await usbDevice.transferOut(outEndpoint.endpointNumber, data);
                 
-            appendOutput(`Response: ${cleanResponse || 'No data'}`);
-            return cleanResponse || 'No data';
+                // Wait a bit before reading response
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Read response
+                let result;
+                try {
+                    result = await Promise.race([
+                        usbDevice.transferIn(inEndpoint.endpointNumber, 128),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout waiting for response')), 3000))
+                    ]);
+                } catch (e) {
+                    appendOutput(`No response received for ${description}`, 'warning');
+                    return 'No response';
+                }
+                
+                const decoder = new TextDecoder();
+                const response = decoder.decode(result.data);
+                
+                // Clean up the response
+                const cleanResponse = response
+                    .replace(command, '')
+                    .replace(/OK|ERROR/gi, '')
+                    .replace(/\r|\n/g, ' ')
+                    .trim();
+                    
+                appendOutput(`Response: ${cleanResponse || 'No data'}`);
+                return cleanResponse || 'No data';
+            } catch (error) {
+                if (error.message.includes('disconnected') && retryCount < maxRetries) {
+                    retryCount++;
+                    appendOutput(`Connection issue detected. Retrying (${retryCount}/${maxRetries})...`, 'warning');
+                    
+                    // Wait a bit before retrying
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Try to reconnect
+                    try {
+                        await usbDevice.close();
+                        await usbDevice.open();
+                        await usbDevice.selectConfiguration(1);
+                        await usbDevice.claimInterface(selectedInterface.interfaceNumber);
+                        
+                        appendOutput('Reconnected successfully. Retrying command...', 'success');
+                        return await sendATCommand(command, description);
+                    } catch (reconnectError) {
+                        throw new Error(`Failed to reconnect after ${retryCount} attempts: ${reconnectError.message}`);
+                    }
+                } else {
+                    throw error;
+                }
+            }
         }
         
         // Get device information
@@ -531,6 +661,7 @@
             try {
                 updateStatus('Reading device information...');
                 clearOutput();
+                retryCount = 0;
                 
                 const commands = [
                     { cmd: 'AT+CGMI\r\n', desc: 'Manufacturer' },
@@ -556,7 +687,7 @@
                     }
                     
                     // Delay between commands
-                    await new Promise(resolve => setTimeout(resolve, 500));
+                    await new Promise(resolve => setTimeout(resolve, 800));
                 }
                 
                 // Display formatted results
@@ -592,6 +723,7 @@
                 usbDevice = null;
             }
             
+            isConnected = false;
             updateButtonStates();
             updateProgress(0);
         }
@@ -601,9 +733,19 @@
         getInfoBtn.addEventListener('click', getDeviceInfo);
         disconnectBtn.addEventListener('click', disconnectDevice);
         clearBtn.addEventListener('click', clearOutput);
+        testWebUsbBtn.addEventListener('click', testWebUsbSupport);
+        testConnectionBtn.addEventListener('click', testConnection);
         
         // Initialize
         updateButtonStates();
+        
+        // Check WebUSB support on load
+        window.addEventListener('load', () => {
+            if (!navigator.usb) {
+                updateStatus('WebUSB not supported in this browser', 'error');
+                appendOutput('Error: WebUSB API is not supported in this browser. Please use Chrome or Edge.', 'error');
+            }
+        });
     </script>
 </body>
 </html>
