@@ -82,12 +82,12 @@
                     throw new Error('No valid interface or endpoints found.');
                 }
 
-                // AT commands
+                // AT commands with \r\n termination
                 const commands = [
-                    'AT+CGMI\r', // Manufacturer
-                    'AT+CGMM\r', // Model Number
-                    'AT+CGMR\r', // Firmware Version
-                    'AT+CGSN\r'  // IMEI
+                    'AT+CGMI\r\n', // Manufacturer
+                    'AT+CGMM\r\n', // Model Number
+                    'AT+CGMR\r\n', // Firmware Version
+                    'AT+CGSN\r\n'  // IMEI
                     // Add Samsung-specific commands if discovered
                 ];
 
@@ -101,8 +101,8 @@
 
                         // Read response with increased timeout
                         const result = await Promise.race([
-                            device.transferIn(inEndpoint.endpointNumber, 64),
-                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout reading response')), 2000))
+                            device.transferIn(inEndpoint.endpointNumber, 128),
+                            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout reading response')), 3000))
                         ]);
                         const decoder = new TextDecoder();
                         const response = decoder.decode(result.data);
@@ -120,7 +120,7 @@
                 // Display formatted output
                 document.getElementById('output').textContent = formatOutput(output);
             } catch (error) {
-                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure the phone is connected via USB in the correct mode (same as your working tool) and USB drivers are installed. Check console for endpoint details.`;
+                document.getElementById('output').textContent = `Error: ${error.message}\nEnsure the phone is connected via USB in the same mode as your working tool, USB drivers are installed, and the modem is accessible. Check console for endpoint details.`;
                 console.log('Device Info:', await navigator.usb.getDevices());
             }
         }
