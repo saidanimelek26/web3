@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Fixed Phone Info Reader</title>
+    <title>Phone Info Reader - Fixed</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -291,8 +291,8 @@
 <body>
     <div class="container">
         <header>
-            <h1>Fixed Phone Information Reader</h1>
-            <p class="subtitle">Robust USB communication with improved error handling</p>
+            <h1>Phone Information Reader - Fixed</h1>
+            <p class="subtitle">Stable USB communication with connection verification</p>
         </header>
         
         <div class="content">
@@ -300,21 +300,7 @@
                 <div class="card-title">
                     <i class="fas fa-info-circle"></i> About This Fixed Version
                 </div>
-                <p>This version includes improved error handling for USB disconnections and better recovery mechanisms.</p>
-            </div>
-            
-            <div class="connection-test">
-                <h3><i class="fas fa-wifi"></i> Connection Test</h3>
-                <p>Check if your browser supports WebUSB and if your device is properly connected.</p>
-                <div class="button-group">
-                    <button id="testWebUsbBtn" class="btn-secondary">
-                        <i class="fas fa-check-circle"></i> Test WebUSB Support
-                    </button>
-                    <button id="testConnectionBtn" class="btn-secondary" disabled>
-                        <i class="fas fa-plug"></i> Test Connection
-                    </button>
-                </div>
-                <div id="testResult"></div>
+                <p>This version includes connection verification before each command to prevent errors when the device disconnects during communication.</p>
             </div>
             
             <div class="button-group">
@@ -355,7 +341,6 @@
                     <li>Enable USB debugging on your Android device (Developer options)</li>
                     <li>On your phone, select "File Transfer" or "MTP" mode when the USB prompt appears</li>
                     <li>Try different USB modes if connection fails (PTP, RNDIS, etc.)</li>
-                    <li>Click "Test WebUSB Support" first to verify browser compatibility</li>
                 </ul>
             </div>
             
@@ -367,7 +352,6 @@
                     <li>Check if your device manufacturer requires special drivers</li>
                     <li>Restart your phone and computer</li>
                     <li>Try enabling/disabling USB tethering</li>
-                    <li>Some devices require specific USB modes (PTP, RNDIS, etc.)</li>
                 </ul>
             </div>
         </div>
@@ -384,20 +368,15 @@
         let outEndpoint = null;
         let selectedInterface = null;
         let isConnected = false;
-        let retryCount = 0;
-        const maxRetries = 2;
         
         // DOM elements
         const connectBtn = document.getElementById('connectBtn');
         const getInfoBtn = document.getElementById('getInfoBtn');
         const disconnectBtn = document.getElementById('disconnectBtn');
         const clearBtn = document.getElementById('clearBtn');
-        const testWebUsbBtn = document.getElementById('testWebUsbBtn');
-        const testConnectionBtn = document.getElementById('testConnectionBtn');
         const statusEl = document.getElementById('status');
         const outputEl = document.getElementById('output');
         const progressBar = document.getElementById('progressBar');
-        const testResultEl = document.getElementById('testResult');
         
         // Update status message
         function updateStatus(message, type = 'info') {
@@ -434,65 +413,28 @@
             connectBtn.disabled = isConnected;
             getInfoBtn.disabled = !isConnected;
             disconnectBtn.disabled = !isConnected;
-            testConnectionBtn.disabled = !isConnected;
         }
         
-        // Test WebUSB support
-        function testWebUsbSupport() {
-            testResultEl.innerHTML = '';
-            
-            if (!navigator.usb) {
-                testResultEl.innerHTML = '<div class="error">WebUSB is not supported in this browser. Try Chrome or Edge.</div>';
-                return;
-            }
-            
-            testResultEl.innerHTML = '<div class="success">WebUSB is supported in this browser.</div>';
-            
-            // Check if we can access devices
-            navigator.usb.getDevices()
-                .then(devices => {
-                    if (devices.length > 0) {
-                        testResultEl.innerHTML += '<div class="success">USB devices detected: ' + devices.length + '</div>';
-                    } else {
-                        testResultEl.innerHTML += '<div class="warning">No USB devices found. Connect a device and click "Connect".</div>';
-                    }
-                })
-                .catch(error => {
-                    testResultEl.innerHTML += '<div class="error">Error accessing USB devices: ' + error.message + '</div>';
-                });
-        }
-        
-        // Test connection stability
-        async function testConnection() {
-            if (!usbDevice) {
-                testResultEl.innerHTML = '<div class="error">No device connected</div>';
-                return;
-            }
-            
-            testResultEl.innerHTML = '<div>Testing connection stability...</div>';
+        // Check if device is still connected
+        async function isDeviceConnected() {
+            if (!usbDevice) return false;
             
             try {
-                // Simple test command
-                const encoder = new TextEncoder();
-                const data = encoder.encode('AT\r\n');
+                // Try to get devices to see if our device is still in the list
+                const devices = await navigator.usb.getDevices();
+                const stillConnected = devices.some(device => device.serialNumber === usbDevice.serialNumber);
                 
-                await usbDevice.transferOut(outEndpoint.endpointNumber, data);
-                
-                // Wait a bit before reading response
-                await new Promise(resolve => setTimeout(resolve, 300));
-                
-                // Read response
-                const result = await usbDevice.transferIn(inEndpoint.endpointNumber, 64);
-                const decoder = new TextDecoder();
-                const response = decoder.decode(result.data);
-                
-                if (response.includes('OK')) {
-                    testResultEl.innerHTML += '<div class="success">Connection test passed</div>';
-                } else {
-                    testResultEl.innerHTML += '<div class="warning">Connection test completed but received unexpected response</div>';
+                if (!stillConnected) {
+                    isConnected = false;
+                    updateButtonStates();
+                    updateStatus('Device was disconnected', 'error');
+                    appendOutput('Device was disconnected', 'error');
                 }
+                
+                return stillConnected;
             } catch (error) {
-                testResultEl.innerHTML += '<div class="error">Connection test failed: ' + error.message + '</div>';
+                console.error('Error checking device connection:', error);
+                return false;
             }
         }
         
@@ -501,6 +443,7 @@
             try {
                 updateStatus('Requesting device access...');
                 updateProgress(10);
+                clearOutput();
                 
                 // Check if WebUSB is available
                 if (!navigator.usb) {
@@ -564,8 +507,6 @@
                 
                 if (usbDevice) {
                     try {
-                        // Check if device is still connected before trying to close it
-                        await navigator.usb.getDevices();
                         await usbDevice.close();
                     } catch (e) {
                         console.error('Error closing device:', e);
@@ -579,32 +520,14 @@
             }
         }
         
-        // Check if device is still connected
-        async function isDeviceConnected() {
-            if (!usbDevice) return false;
-            
-            try {
-                // Try to get devices to see if our device is still in the list
-                const devices = await navigator.usb.getDevices();
-                return devices.some(device => device === usbDevice);
-            } catch (error) {
-                console.error('Error checking device connection:', error);
-                return false;
-            }
-        }
-        
-        // Send AT command with improved error handling
+        // Send AT command with connection verification
         async function sendATCommand(command, description) {
-            if (!usbDevice || !outEndpoint || !inEndpoint) {
-                throw new Error('Device not connected');
-            }
-            
-            appendOutput(`Sending: ${command.trim()}`);
-            
-            // Check if device is still connected
+            // Check if device is still connected before sending command
             if (!(await isDeviceConnected())) {
                 throw new Error('Device was disconnected');
             }
+            
+            appendOutput(`Sending: ${command.trim()}`);
             
             // Encode and send command
             const encoder = new TextEncoder();
@@ -647,7 +570,7 @@
                 return cleanResponse || 'No data';
             } catch (error) {
                 if (error.message.includes('disconnected')) {
-                    // Device was disconnected, we can't recover from this
+                    // Device was disconnected, update state
                     isConnected = false;
                     updateButtonStates();
                     throw new Error('Device was disconnected during communication');
@@ -667,8 +590,7 @@
             
             try {
                 updateStatus('Reading device information...');
-                clearOutput();
-                retryCount = 0;
+                updateProgress(10);
                 
                 const commands = [
                     { cmd: 'AT+CGMI\r\n', desc: 'Manufacturer' },
@@ -682,7 +604,7 @@
                 for (let i = 0; i < commands.length; i++) {
                     const command = commands[i];
                     updateStatus(`Getting ${command.desc} (${i+1}/${commands.length})`);
-                    updateProgress((i / commands.length) * 100);
+                    updateProgress(10 + (i / commands.length) * 80);
                     
                     try {
                         results[command.desc] = await sendATCommand(command.cmd, command.desc);
@@ -702,10 +624,10 @@
                 
                 // Display formatted results
                 appendOutput('\n==== DEVICE INFORMATION ====');
-                appendOutput(`Manufacturer: ${results['Manufacturer']}`);
-                appendOutput(`Model: ${results['Model Number']}`);
-                appendOutput(`Firmware: ${results['Firmware Version']}`);
-                appendOutput(`IMEI: ${results['IMEI']}`);
+                appendOutput(`Manufacturer: ${results['Manufacturer'] || 'Not available'}`);
+                appendOutput(`Model: ${results['Model Number'] || 'Not available'}`);
+                appendOutput(`Firmware: ${results['Firmware Version'] || 'Not available'}`);
+                appendOutput(`IMEI: ${results['IMEI'] || 'Not available'}`);
                 
                 updateStatus('Device information retrieved', 'success');
                 updateProgress(100);
@@ -747,8 +669,6 @@
         getInfoBtn.addEventListener('click', getDeviceInfo);
         disconnectBtn.addEventListener('click', disconnectDevice);
         clearBtn.addEventListener('click', clearOutput);
-        testWebUsbBtn.addEventListener('click', testWebUsbSupport);
-        testConnectionBtn.addEventListener('click', testConnection);
         
         // Initialize
         updateButtonStates();
